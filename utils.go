@@ -33,12 +33,42 @@ func (d *dbusBase) init(iface string, objectPath dbus.ObjectPath) error {
 func (d *dbusBase) call(value interface{}, method string, args ...interface{}) {
 	err := d.callError(value, method, args...)
 	if err != nil {
+		fmt.Println(err)
 		panic(err)
 	}
 }
 
+func (d *dbusBase) callMultipleResults(value []interface{}, method string, args ...interface{}) {
+	err := d.callErrorMultipleResults(value, method, args...)
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+}
+
+func (d *dbusBase) callNoFail(value interface{}, method string, args ...interface{}) {
+	err := d.callError(value, method, args...)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
 func (d *dbusBase) callError(value interface{}, method string, args ...interface{}) error {
-	return d.obj.Call(method, 0, args...).Store(value)
+	if value == nil {
+		call := d.obj.Call(method, 0, args...)
+		return call.Err
+	} else {
+		return d.obj.Call(method, 0, args...).Store(value)
+	}
+}
+
+func (d *dbusBase) callErrorMultipleResults(value []interface{}, method string, args ...interface{}) error {
+	if value == nil {
+		call := d.obj.Call(method, 0, args...)
+		return call.Err
+	} else {
+		return d.obj.Call(method, 0, args...).Store(value...)
+	}
 }
 
 func (d *dbusBase) subscribe(iface, member string) {

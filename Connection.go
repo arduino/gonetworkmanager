@@ -9,7 +9,8 @@ import (
 const (
 	ConnectionInterface = SettingsInterface + ".Connection"
 
-	ConnectionGetSettings = ConnectionInterface + ".GetSettings"
+	ConnectionAddConnection = SettingsInterface + ".AddConnection"
+	ConnectionGetSettings   = ConnectionInterface + ".GetSettings"
 )
 
 //type ConnectionSettings map[string]map[string]interface{}
@@ -22,6 +23,8 @@ type Connection interface {
 	// separately using the GetSecrets() call.
 	GetSettings() ConnectionSettings
 
+	AddConnection(name, password string) dbus.ObjectPath
+
 	MarshalJSON() ([]byte, error)
 }
 
@@ -32,6 +35,27 @@ func NewConnection(objectPath dbus.ObjectPath) (Connection, error) {
 
 type connection struct {
 	dbusBase
+}
+
+func (c *connection) AddConnection(name, password string) dbus.ObjectPath {
+	var settings ConnectionSettings
+	var ret dbus.ObjectPath
+
+	settings = make(ConnectionSettings)
+	settings["802-11-wireless"] = make(map[string]interface{})
+	settings["802-11-wireless-security"] = make(map[string]interface{})
+	settings["connection"] = make(map[string]interface{})
+
+	settings["802-11-wireless"]["ssid"] = []byte(name)
+	settings["802-11-wireless"]["security"] = "802-11-wireless-security"
+	settings["802-11-wireless-security"]["psk"] = password
+	settings["802-11-wireless-security"]["key-mgmt"] = "wpa-psk"
+
+	settings["connection"]["id"] = name
+	settings["connection"]["type"] = "802-11-wireless"
+
+	c.call(&ret, ConnectionAddConnection, settings)
+	return ret
 }
 
 func (c *connection) GetSettings() ConnectionSettings {

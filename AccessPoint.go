@@ -53,16 +53,24 @@ type AccessPoint interface {
 	// percent.
 	GetStrength() uint8
 
+	GetObjectPath() dbus.ObjectPath
+
 	MarshalJSON() ([]byte, error)
 }
 
 func NewAccessPoint(objectPath dbus.ObjectPath) (AccessPoint, error) {
 	var a accessPoint
+	a.path = objectPath
 	return &a, a.init(NetworkManagerInterface, objectPath)
 }
 
 type accessPoint struct {
 	dbusBase
+	path dbus.ObjectPath
+}
+
+func (a *accessPoint) GetObjectPath() dbus.ObjectPath {
+	return a.path
 }
 
 func (a *accessPoint) GetFlags() uint32 {

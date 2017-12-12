@@ -10,8 +10,11 @@ const (
 	NetworkManagerInterface  = "org.freedesktop.NetworkManager"
 	NetworkManagerObjectPath = "/org/freedesktop/NetworkManager"
 
-	NetworkManagerGetDevices    = NetworkManagerInterface + ".GetDevices"
-	NetworkManagerPropertyState = NetworkManagerInterface + ".state"
+	NetworkManagerGetDevices               = NetworkManagerInterface + ".GetDevices"
+	NetworkManagerPropertyState            = NetworkManagerInterface + ".State"
+	NetworkManagerAddAndActivateConnection = NetworkManagerInterface + ".AddAndActivateConnection"
+
+	NetworkManagerWifiScan = NetworkManagerInterface + ".Device.Wireless" + ".RequestScan"
 )
 
 type NetworkManager interface {
@@ -27,6 +30,8 @@ type NetworkManager interface {
 	Subscribe() <-chan *dbus.Signal
 	Unsubscribe()
 
+	AddConnection(name, password string)
+
 	MarshalJSON() ([]byte, error)
 }
 
@@ -39,6 +44,49 @@ type networkManager struct {
 	dbusBase
 
 	sigChan chan *dbus.Signal
+}
+
+func (n *networkManager) AddConnection(name, password string) {
+
+	var ret1 dbus.ObjectPath
+	var ret2 dbus.ObjectPath
+
+	var ret []interface{}
+
+	ret = append(ret, &ret1)
+	ret = append(ret, &ret2)
+
+	settings := make(ConnectionSettings)
+	settings["802-11-wireless"] = make(map[string]interface{})
+	settings["802-11-wireless-security"] = make(map[string]interface{})
+	settings["connection"] = make(map[string]interface{})
+
+	settings["802-11-wireless"]["ssid"] = []byte(name)
+	//settings["802-11-wireless"]["security"] = "802-11-wireless-security"
+	settings["802-11-wireless-security"]["psk"] = password
+
+	settings["connection"]["id"] = name
+	settings["connection"]["type"] = "802-11-wireless"
+
+	var dev Device
+	var conn AccessPoint
+
+	for _, dev = range n.GetDevices() {
+		if dev.GetDeviceType() == NmDeviceTypeWifi {
+			break
+		}
+	}
+
+	wireless_dev, _ := NewWirelessDevice(dev.GetObjectPath())
+
+	// scan wifi, get path of network you want to conenct to
+	for _, conn = range wireless_dev.GetAccessPoints() {
+		if conn.GetSSID() == name {
+			break
+		}
+	}
+
+	n.callMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), conn.GetObjectPath())
 }
 
 func (n *networkManager) GetDevices() []Device {

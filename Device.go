@@ -51,16 +51,24 @@ type Device interface {
 	// connection that is currently 'available' through this device.
 	GetAvailableConnections() []Connection
 
+	GetObjectPath() dbus.ObjectPath
+
 	MarshalJSON() ([]byte, error)
 }
 
 func NewDevice(objectPath dbus.ObjectPath) (Device, error) {
 	var d device
+	d.path = objectPath
 	return &d, d.init(NetworkManagerInterface, objectPath)
 }
 
 type device struct {
 	dbusBase
+	path dbus.ObjectPath
+}
+
+func (d *device) GetObjectPath() dbus.ObjectPath {
+	return d.path
 }
 
 func (d *device) GetInterface() string {
