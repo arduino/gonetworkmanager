@@ -71,10 +71,18 @@ func (n *networkManager) AddConnection(name, password string) {
 	var dev Device
 	var conn AccessPoint
 
+	devFound := false
+	connFound := false
+
 	for _, dev = range n.GetDevices() {
 		if dev.GetDeviceType() == NmDeviceTypeWifi {
+			devFound = true
 			break
 		}
+	}
+
+	if !devFound {
+		return
 	}
 
 	wireless_dev, _ := NewWirelessDevice(dev.GetObjectPath())
@@ -82,8 +90,13 @@ func (n *networkManager) AddConnection(name, password string) {
 	// scan wifi, get path of network you want to conenct to
 	for _, conn = range wireless_dev.GetAccessPoints() {
 		if conn.GetSSID() == name {
+			connFound = true
 			break
 		}
+	}
+
+	if !connFound {
+		return
 	}
 
 	n.callMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), conn.GetObjectPath())
