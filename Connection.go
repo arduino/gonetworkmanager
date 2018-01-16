@@ -1,7 +1,9 @@
 package gonetworkmanager
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"net"
 
 	"github.com/godbus/dbus"
 )
@@ -23,7 +25,7 @@ type Connection interface {
 	// separately using the GetSecrets() call.
 	GetSettings() ConnectionSettings
 
-	AddConnection(name, password string) dbus.ObjectPath
+	AddWirelessConnection(name, password string) dbus.ObjectPath
 
 	MarshalJSON() ([]byte, error)
 }
@@ -37,7 +39,17 @@ type connection struct {
 	dbusBase
 }
 
-func (c *connection) AddConnection(name, password string) dbus.ObjectPath {
+func ip2int(ip net.IP) uint32 {
+	if ip == nil {
+		return 0
+	}
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+func (c *connection) AddWirelessConnection(name, password string) dbus.ObjectPath {
 	var settings ConnectionSettings
 	var ret dbus.ObjectPath
 

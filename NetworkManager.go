@@ -2,8 +2,12 @@ package gonetworkmanager
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
+	"strconv"
 
 	"github.com/godbus/dbus"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -16,6 +20,15 @@ const (
 
 	NetworkManagerWifiScan = NetworkManagerInterface + ".Device.Wireless" + ".RequestScan"
 )
+
+type IpProxyConfig struct {
+	Ip          string
+	Prefix      string
+	Gateway     string
+	Dns_server  string
+	Http_proxy  string
+	Https_proxy string
+}
 
 type NetworkManager interface {
 
@@ -30,7 +43,8 @@ type NetworkManager interface {
 	Subscribe() <-chan *dbus.Signal
 	Unsubscribe()
 
-	AddConnection(name, password string)
+	AddWirelessConnection(name, password string) dbus.ObjectPath
+	AddWiredConnection(manual bool, config IpProxyConfig) dbus.ObjectPath
 
 	MarshalJSON() ([]byte, error)
 }
@@ -46,7 +60,73 @@ type networkManager struct {
 	sigChan chan *dbus.Signal
 }
 
-func (n *networkManager) AddConnection(name, password string) {
+func (n *networkManager) AddWiredConnection(manual bool, config IpProxyConfig) dbus.ObjectPath {
+
+	var ret1 dbus.ObjectPath
+	var ret2 dbus.ObjectPath
+	var ret []interface{}
+
+	ret = append(ret, &ret1)
+	ret = append(ret, &ret2)
+
+	var dev Device
+
+	devFound := false
+
+	for _, dev = range n.GetDevices() {
+		if dev.GetDeviceType() == NmDeviceTypeEthernet {
+			devFound = true
+			fmt.Println("Found eth device ", dev)
+			break
+		}
+	}
+
+	if !devFound {
+		return *(ret[0].(*dbus.ObjectPath))
+	}
+
+	settings := make(ConnectionSettings)
+
+	ip := net.ParseIP(config.Ip)
+	prefix, _ := strconv.ParseUint(config.Prefix, 10, 32)
+	gateway := net.ParseIP(config.Gateway)
+	dns := net.ParseIP(config.Dns_server)
+
+	settings["802-3-ethernet"] = make(map[string]interface{})
+	settings["ipv4"] = make(map[string]interface{})
+	settings["connection"] = make(map[string]interface{})
+
+	settings["802-3-ethernet"]["duplex"] = "full"
+
+	id := uuid.Must(uuid.NewV4())
+	settings["connection"]["id"] = "MyWiredConnection"
+	settings["connection"]["uuid"] = id.String()
+	settings["connection"]["type"] = "802-3-ethernet"
+
+	var addrs [][]uint32
+	addrs = append(addrs, []uint32{ip2int(ip), uint32(prefix), ip2int(gateway)})
+
+	var dns_addrs []uint32
+	dns_addrs = append(dns_addrs, ip2int(dns))
+
+	settings["ipv4"]["addresses"] = addrs
+	//settings["ipv4"]["gateway"] = gateway.String()
+	if manual {
+		settings["ipv4"]["method"] = "manual"
+	} else {
+		settings["ipv4"]["method"] = "auto"
+	}
+	settings["ipv4"]["dns"] = dns_addrs
+	settings["ipv4"]["may-fail"] = true
+
+	// ignored for wired connections https://people.freedesktop.org/~lkundrak/nm-docs/gdbus-org.freedesktop.NetworkManager.html#gdbus-method-org-freedesktop-NetworkManager.AddAndActivateConnection
+	conn := "/"
+
+	n.callMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), dbus.ObjectPath(conn))
+	return *(ret[0].(*dbus.ObjectPath))
+}
+
+func (n *networkManager) AddWirelessConnection(name, password string) dbus.ObjectPath {
 
 	var ret1 dbus.ObjectPath
 	var ret2 dbus.ObjectPath
@@ -82,7 +162,7 @@ func (n *networkManager) AddConnection(name, password string) {
 	}
 
 	if !devFound {
-		return
+		return *(ret[0].(*dbus.ObjectPath))
 	}
 
 	wireless_dev, _ := NewWirelessDevice(dev.GetObjectPath())
@@ -96,10 +176,11 @@ func (n *networkManager) AddConnection(name, password string) {
 	}
 
 	if !connFound {
-		return
+		return *(ret[0].(*dbus.ObjectPath))
 	}
 
 	n.callMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), conn.GetObjectPath())
+	return *(ret[0].(*dbus.ObjectPath))
 }
 
 func (n *networkManager) GetDevices() []Device {
