@@ -11,6 +11,7 @@ const (
 
 	WirelessDeviceGetAccessPoints = WirelessDeviceInterface + ".GetAccessPoints"
 	WirelessDeviceRequestScan     = WirelessDeviceInterface + ".RequestScan"
+	WirelessDeviceHWAddress       = WirelessDeviceInterface + ".HwAddress"
 )
 
 type WirelessDevice interface {
@@ -21,6 +22,8 @@ type WirelessDevice interface {
 	// To retrieve a list of all access points (including hidden ones) use the
 	// GetAllAccessPoints() method.
 	GetAccessPoints() []AccessPoint
+
+	GetHWAddress() string
 }
 
 func NewWirelessDevice(objectPath dbus.ObjectPath) (WirelessDevice, error) {
@@ -58,8 +61,13 @@ func (d *wirelessDevice) GetAccessPoints() []AccessPoint {
 	return aps
 }
 
+func (d *wirelessDevice) GetHWAddress() string {
+	return d.getStringProperty(WirelessDeviceHWAddress)
+}
+
 func (d *wirelessDevice) MarshalJSON() ([]byte, error) {
 	m := d.device.marshalMap()
 	m["AccessPoints"] = d.GetAccessPoints()
+	m["HWAddress"] = d.GetHWAddress()
 	return json.Marshal(m)
 }

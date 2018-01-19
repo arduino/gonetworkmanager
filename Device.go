@@ -25,6 +25,8 @@ func DeviceFactory(objectPath dbus.ObjectPath) (Device, error) {
 	switch d.GetDeviceType() {
 	case NmDeviceTypeWifi:
 		return NewWirelessDevice(objectPath)
+	case NmDeviceTypeEthernet:
+		return NewWiredDevice(objectPath)
 	}
 
 	return d, nil
