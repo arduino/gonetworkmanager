@@ -33,7 +33,7 @@ type IpProxyConfig struct {
 type NetworkManager interface {
 
 	// GetDevices gets the list of network devices.
-	GetDevices() []Device
+	GetDevices() ([]Device, error)
 
 	// GetState returns the overall networking state as determined by the
 	// NetworkManager daemon, based on the state of network devices under it's
@@ -43,8 +43,8 @@ type NetworkManager interface {
 	Subscribe() <-chan *dbus.Signal
 	Unsubscribe()
 
-	AddWirelessConnection(name, password string) dbus.ObjectPath
-	AddWiredConnection(manual bool, config IpProxyConfig) dbus.ObjectPath
+	AddWirelessConnection(name, password string) (*dbus.ObjectPath, error)
+	AddWiredConnection(manual bool, config IpProxyConfig) (*dbus.ObjectPath, error)
 
 	MarshalJSON() ([]byte, error)
 }
@@ -60,20 +60,17 @@ type networkManager struct {
 	sigChan chan *dbus.Signal
 }
 
-func (n *networkManager) AddWiredConnection(manual bool, config IpProxyConfig) dbus.ObjectPath {
-
-	var ret1 dbus.ObjectPath
-	var ret2 dbus.ObjectPath
-	var ret []interface{}
-
-	ret = append(ret, &ret1)
-	ret = append(ret, &ret2)
+func (n *networkManager) AddWiredConnection(manual bool, config IpProxyConfig) (*dbus.ObjectPath, error) {
 
 	var dev Device
 
 	devFound := false
 
-	for _, dev = range n.GetDevices() {
+	devices, err := n.GetDevices()
+	if err != nil {
+		return nil, err
+	}
+	for _, dev = range devices {
 		if dev.GetDeviceType() == NmDeviceTypeEthernet {
 			devFound = true
 			fmt.Println("Found eth device ", dev)
@@ -82,7 +79,7 @@ func (n *networkManager) AddWiredConnection(manual bool, config IpProxyConfig) d
 	}
 
 	if !devFound {
-		return *(ret[0].(*dbus.ObjectPath))
+		return nil, nil
 	}
 
 	settings := make(ConnectionSettings)
@@ -122,19 +119,16 @@ func (n *networkManager) AddWiredConnection(manual bool, config IpProxyConfig) d
 	// ignored for wired connections https://people.freedesktop.org/~lkundrak/nm-docs/gdbus-org.freedesktop.NetworkManager.html#gdbus-method-org-freedesktop-NetworkManager.AddAndActivateConnection
 	conn := "/"
 
-	n.callMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), dbus.ObjectPath(conn))
-	return *(ret[0].(*dbus.ObjectPath))
-}
-
-func (n *networkManager) AddWirelessConnection(name, password string) dbus.ObjectPath {
-
 	var ret1 dbus.ObjectPath
 	var ret2 dbus.ObjectPath
+	ret := []interface{}{&ret1, &ret2}
+	if err := n.callErrorMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), dbus.ObjectPath(conn)); err != nil {
+		return nil, err
+	}
+	return &ret1, nil
+}
 
-	var ret []interface{}
-
-	ret = append(ret, &ret1)
-	ret = append(ret, &ret2)
+func (n *networkManager) AddWirelessConnection(name, password string) (*dbus.ObjectPath, error) {
 
 	settings := make(ConnectionSettings)
 	settings["802-11-wireless"] = make(map[string]interface{})
@@ -154,7 +148,11 @@ func (n *networkManager) AddWirelessConnection(name, password string) dbus.Objec
 	devFound := false
 	connFound := false
 
-	for _, dev = range n.GetDevices() {
+	devices, err := n.GetDevices()
+	if err != nil {
+		return nil, err
+	}
+	for _, dev = range devices {
 		if dev.GetDeviceType() == NmDeviceTypeWifi {
 			devFound = true
 			break
@@ -162,7 +160,7 @@ func (n *networkManager) AddWirelessConnection(name, password string) dbus.Objec
 	}
 
 	if !devFound {
-		return *(ret[0].(*dbus.ObjectPath))
+		return nil, nil
 	}
 
 	wireless_dev, _ := NewWirelessDevice(dev.GetObjectPath())
@@ -176,28 +174,35 @@ func (n *networkManager) AddWirelessConnection(name, password string) dbus.Objec
 	}
 
 	if !connFound {
-		return *(ret[0].(*dbus.ObjectPath))
+		return nil, nil
 	}
 
-	n.callMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), conn.GetObjectPath())
-	return *(ret[0].(*dbus.ObjectPath))
+	var ret1 dbus.ObjectPath
+	var ret2 dbus.ObjectPath
+	ret := []interface{}{&ret1, &ret2}
+	if err := n.callErrorMultipleResults(ret, NetworkManagerAddAndActivateConnection, settings, dev.GetObjectPath(), conn.GetObjectPath()); err != nil {
+		return nil, err
+	}
+	return &ret1, nil
 }
 
-func (n *networkManager) GetDevices() []Device {
+func (n *networkManager) GetDevices() ([]Device, error) {
 	var devicePaths []dbus.ObjectPath
 
-	n.call(&devicePaths, NetworkManagerGetDevices)
+	if err := n.callError(&devicePaths, NetworkManagerGetDevices); err != nil {
+		return nil, err
+	}
 	devices := make([]Device, len(devicePaths))
 
 	var err error
 	for i, path := range devicePaths {
 		devices[i], err = DeviceFactory(path)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
-	return devices
+	return devices, nil
 }
 
 func (n *networkManager) GetState() NmState {
@@ -222,8 +227,12 @@ func (n *networkManager) Unsubscribe() {
 }
 
 func (n *networkManager) MarshalJSON() ([]byte, error) {
+	devices, err := n.GetDevices()
+	if err != nil {
+		return nil, err
+	}
 	return json.Marshal(map[string]interface{}{
 		"NetworkState": n.GetState().String(),
-		"Devices":      n.GetDevices(),
+		"Devices":      devices,
 	})
 }
