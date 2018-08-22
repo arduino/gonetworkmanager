@@ -95,7 +95,7 @@ func (n *networkManager) AddWiredConnection(manual bool, config IpProxyConfig) (
 
 	settings["802-3-ethernet"]["duplex"] = "full"
 
-	id := uuid.Must(uuid.NewV4())
+	id := uuid.NewV4()
 	settings["connection"]["id"] = "MyWiredConnection"
 	settings["connection"]["uuid"] = id.String()
 	settings["connection"]["type"] = "802-3-ethernet"
